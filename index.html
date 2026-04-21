@@ -80,34 +80,25 @@
         // 1. Identificación Moodle
         async function getMoodleUser() {
     try {
-        // Intentamos capturar el Moodle del padre (la ventana principal)
-        const moodleObj = window.M || parent.window.M;
-        const rootDoc = parent.document || document;
+        // 1. Intentamos leer los parámetros de la URL (lo que envía el iframe)
+        const params = new URLSearchParams(window.location.search);
+        const urlId = params.get("id");
         
-        const sesskey = moodleObj?.cfg?.sesskey;
-        const userid = parseInt(rootDoc.querySelector('[data-userid]')?.dataset?.userid);
+        if (urlId) {
+            console.log("ID detectado por URL:", urlId);
+            return { id: urlId, nombre: "Docente Identificado" };
+        }
 
-        if (!userid || !sesskey) return null;
+        // 2. Fallback: Si no hay URL, intentamos lo anterior (solo si no hay iframe)
+        const userid = parseInt(document.querySelector('[data-userid]')?.dataset?.userid);
+        if (userid) return { id: userid, nombre: "Docente" };
 
-        // La llamada a la API debe ser relativa a la URL de la facultad
-        // Usamos la URL base de Moodle si está disponible
-        const baseUrl = moodleObj.cfg.wwwroot;
-        const r = await fetch(baseUrl + '/lib/ajax/service.php?sesskey=' + sesskey, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify([{
-                methodname: 'core_user_get_users_by_field',
-                args: { field: 'id', values: [String(userid)] }
-            }])
-        });
-        const d = await r.json();
-        return { id: userid, nombre: d[0]?.data?.[0]?.fullname || "Docente" };
+        return null;
     } catch (e) {
-        console.error("Error de identificación:", e);
         return null;
     }
 }
-
+        
         async function init() {
             // Fecha por defecto
             document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
