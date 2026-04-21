@@ -69,43 +69,42 @@
     </div>
 
     <script>
-    // --- VARIABLES GLOBALES ---
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlwxnVhYD_0dv-xXWJUZf9mC4DZGhSl0gPH9ZUXmwgLaPuQ9wZVfGdzfyoJnClea4Y/exec"; 
+    // --- CONFIGURACIÓN ---
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlwxnVhYD_0dv-xXWJUZf9mC4DZGhSl0gPH9ZUXmwgLaPuQ9wZVfGdzfyoJnClea4Y/exec";
 let docenteId = null;
 let docenteNombre = "";
 
-// 1. FUNCIÓN DE INICIO (Se ejecuta al cargar la página)
-async function init() {
-    document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
-    updateStatus("loading", "Identificando sesión...");
-
-    // Intentar obtener ID desde la URL (Método seguro para Iframes)
+// 1. Detección de Identidad (URL o Moodle)
+async function getMoodleUser() {
     const params = new URLSearchParams(window.location.search);
     const urlId = params.get("id");
 
     if (urlId) {
-        docenteId = urlId;
-        docenteNombre = "Docente (ID: " + urlId + ")";
-        document.getElementById("docente-badge").textContent = docenteNombre;
-        // Si tenemos ID, procedemos a cargar los centros
-        await cargarCentrosDesdeGoogle();
-    } else {
-        updateStatus("err", "No se detectó ID en la URL. Usa: ...html?id=6");
+        return { id: urlId, nombre: "Docente (ID: " + urlId + ")" };
     }
+    
+    // Si no hay ID en URL, intentamos leer el atributo de Moodle (si no hay bloqueo)
+    try {
+        const userid = document.querySelector('[data-userid]')?.dataset?.userid || 
+                       parent.document.querySelector('[data-userid]')?.dataset?.userid;
+        if (userid) return { id: userid, nombre: "Docente" };
+    } catch (e) { console.warn("Bloqueo de seguridad al leer ID padre."); }
+
+    return null;
 }
 
-// 2. LA FUNCIÓN QUE BUSCABAS: Cargar Centros desde Google
+// 2. FUNCIÓN PRINCIPAL DE CARGA (La que faltaba)
 async function cargarCentrosDesdeGoogle() {
     try {
-        updateStatus("loading", "Buscando centros asignados...");
+        updateStatus("loading", "Buscando tus centros formadores...");
         
-        // El fetch lleva el ID y un 'cachebuster' para que Google no devuelva datos viejos
+        // Petición a Google con ID y marca de tiempo para evitar caché
         const url = `${APPS_SCRIPT_URL}?action=docente&id=${docenteId}&t=${Date.now()}`;
         const res = await fetch(url);
         const data = await res.json();
 
         const sel = document.getElementById("sel-cf");
-        sel.innerHTML = ""; // Limpiar el selector
+        sel.innerHTML = ""; // Limpiar opciones previas
 
         if (data.encontrado && data.cfs.length > 0) {
             data.cfs.forEach(nombreCentro => {
@@ -116,24 +115,43 @@ async function cargarCentrosDesdeGoogle() {
             });
             sel.disabled = false;
             document.getElementById("btn-scan").disabled = false;
-            updateStatus("ok", "✓ Centros listos para trabajar");
+            updateStatus("ok", "✓ Centros cargados correctamente.");
         } else {
-            updateStatus("err", `ID ${docenteId} no tiene centros en el Excel.`);
+            updateStatus("err", `El ID ${docenteId} no tiene centros asignados.`);
         }
     } catch (e) {
-        console.error("Error en fetch:", e);
-        updateStatus("err", "Error de conexión con Google Sheets.");
+        console.error("Error en cargarCentros:", e);
+        updateStatus("err", "Error de conexión con la base de datos.");
     }
 }
 
-// 3. FUNCIÓN DE ESTADO (Para el recuadro de colores)
+// 3. Inicio del Sistema
+async function init() {
+    // Setea fecha de hoy
+    document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
+
+    const user = await getMoodleUser();
+    if (user) {
+        docenteId = user.id;
+        docenteNombre = user.nombre;
+        document.getElementById("docente-badge").textContent = docenteNombre;
+        
+        // Ejecutamos la carga de centros
+        await cargarCentrosDesdeGoogle();
+    } else {
+        updateStatus("err", "No se detectó usuario. Usa ...html?id=TU_ID");
+    }
+}
+
+// 4. Actualización Visual de Estado
 function updateStatus(clase, texto) {
     const s = document.getElementById("status");
     s.className = `status-box ${clase}`;
     s.textContent = texto;
 }
 
-   init();
+// Lanzar el inicio
+init();
     </script>
 </body>
 </html>
