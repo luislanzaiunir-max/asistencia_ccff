@@ -79,24 +79,34 @@
 
         // 1. Identificación Moodle
         async function getMoodleUser() {
-            try {
-                const sesskey = window.M?.cfg?.sesskey;
-                const userid = parseInt(document.querySelector('[data-userid]')?.dataset?.userid) || 
-                               parseInt(parent.document.querySelector('[data-userid]')?.dataset?.userid);
-                if (!userid) return null;
+    try {
+        // Intentamos capturar el Moodle del padre (la ventana principal)
+        const moodleObj = window.M || parent.window.M;
+        const rootDoc = parent.document || document;
+        
+        const sesskey = moodleObj?.cfg?.sesskey;
+        const userid = parseInt(rootDoc.querySelector('[data-userid]')?.dataset?.userid);
 
-                // Solo intentamos el fetch si hay sesskey (estamos en Moodle)
-                if (sesskey) {
-                    const r = await fetch('/lib/ajax/service.php?sesskey=' + sesskey, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify([{ methodname: 'core_user_get_users_by_field', args: { field: 'id', values: [String(userid)] } }])
-                    });
-                    const d = await r.json();
-                    return { id: userid, nombre: d[0]?.data?.[0]?.fullname || "Docente" };
-                }
-                return { id: userid, nombre: "Admin/Docente" };
-            } catch (e) { return null; }
-        }
+        if (!userid || !sesskey) return null;
+
+        // La llamada a la API debe ser relativa a la URL de la facultad
+        // Usamos la URL base de Moodle si está disponible
+        const baseUrl = moodleObj.cfg.wwwroot;
+        const r = await fetch(baseUrl + '/lib/ajax/service.php?sesskey=' + sesskey, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{
+                methodname: 'core_user_get_users_by_field',
+                args: { field: 'id', values: [String(userid)] }
+            }])
+        });
+        const d = await r.json();
+        return { id: userid, nombre: d[0]?.data?.[0]?.fullname || "Docente" };
+    } catch (e) {
+        console.error("Error de identificación:", e);
+        return null;
+    }
+}
 
         async function init() {
             // Fecha por defecto
