@@ -40,7 +40,7 @@
 
 <script>
 // USAR TU URL DE GOOGLE APPS SCRIPT
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlwxnVhYD_0dv-xXWJUZf9mC4DZGhSl0gPH9ZUXmwgLaPuQ9wZVfGdzfyoJnClea4Y/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxgItVOmR_tLu6Mk15bNlETZPQRC-gfrWP2MyY2627ZgtPgBBc2LufOzF62NsvXoX4z/exec";
 let docenteId = null;
 let html5QrCode = null;
 
@@ -93,17 +93,21 @@ async function enviarAsistencia(alumnoId) {
     const centro = document.getElementById("sel-cf").value;
     const fecha = document.getElementById("sel-fecha").value;
     
+    // Estos nombres (idDocente, idAlumno, etc.) deben coincidir con el script de arriba
+    const url = `${APPS_SCRIPT_URL}?action=asistencia&idDocente=${docenteId}&idAlumno=${alumnoId}&centro=${encodeURIComponent(centro)}&fecha=${fecha}`;
+    
     try {
-        // Ajustado para coincidir con tu Script: action=asistencia
-        const res = await fetch(`${APPS_SCRIPT_URL}?action=asistencia&idDocente=${docenteId}&idAlumno=${alumnoId}&centro=${centro}&fecha=${fecha}`);
+        const res = await fetch(url);
         const data = await res.json();
         if (data.ok) {
-            updateStatus("ok", "✓ Registrado: " + alumnoId);
-            setTimeout(() => location.reload(), 3000);
+            updateStatus("ok", "✓ ¡Presente registrado!");
+            setTimeout(() => { location.reload(); }, 3000);
         } else {
-            updateStatus("err", "Error: " + (data.error || "No se pudo guardar"));
+            updateStatus("err", "Error en hoja: " + data.error);
         }
-    } catch (e) { updateStatus("err", "Error de conexión al guardar"); }
+    } catch (e) {
+        updateStatus("err", "Error de red al guardar");
+    }
 }
 
 function updateStatus(c, t) {
