@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asistencia IUNIR</title>
+    <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --text: #f8fafc; --success: #22c55e; --error: #ef4444; }
+        body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
+        .app-card { background: var(--card); padding: 20px; border-radius: 16px; width: 100%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { font-size: 1.1rem; margin: 0; color: var(--accent); letter-spacing: 1px; }
+        .badge { background: #334155; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; }
+        .status-box { padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; border: 1px solid transparent; transition: 0.3s; }
+        .loading { background: rgba(59, 130, 246, 0.1); border-color: var(--accent); color: var(--accent); }
+        .ok { background: rgba(34, 197, 94, 0.1); border-color: var(--success); color: var(--success); }
+        .err { background: rgba(239, 68, 68, 0.1); border-color: var(--error); color: var(--error); }
+        label { display: block; font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-top: 10px; }
+        select, input { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box; }
+        .scanner-wrap { position: relative; width: 100%; aspect-ratio: 1; background: #000; border-radius: 12px; overflow: hidden; margin: 20px 0; border: 2px solid #334155; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        canvas { display: none; }
+        .placeholder-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: #64748b; padding: 20px; }
+        button { width: 100%; padding: 16px; border-radius: 12px; border: none; background: var(--accent); color: white; font-weight: bold; font-size: 1rem; cursor: pointer; }
+        button:disabled { background: #334155; color: #64748b; }
+        .log-header { display: flex; justify-content: space-between; margin-top: 25px; border-bottom: 1px solid #334155; padding-bottom: 5px; }
+        .log-list { list-style: none; padding: 0; margin-top: 10px; max-height: 150px; overflow-y: auto; }
+        .log-item { background: #334155; padding: 10px; border-radius: 8px; margin-bottom: 8px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
+        .item-id { font-weight: bold; color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="app-card">
+        <header>
+            <h1>ASISTENCIA IUNIR</h1>
+            <div id="docente-badge" class="badge">S/N</div>
+        </header>
+
+        <div id="status" class="status-box loading">Buscando sesión en Moodle...</div>
+
+        <label>Centro Formador</label>
+        <select id="sel-cf" disabled><option>Cargando...</option></select>
+
+        <div style="display: flex; gap: 10px;">
+            <div style="flex: 1;"><label>Fecha</label><input type="date" id="sel-fecha"></div>
+            <div style="flex: 1;"><label>Turno</label>
+                <select id="sel-turno">
+                    <option value="Mañana">Mañana</option>
+                    <option value="Tarde">Tarde</option>
+                    <option value="Noche">Noche</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="scanner-wrap">
+            <video id="video" playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div id="placeholder" class="placeholder-msg">La cámara se activará al iniciar el escáner</div>
+        </div>
+
+        <button id="btn-scan" disabled>INICIAR ESCÁNER</button>
+
+        <div class="log-header">
+            <span>Registros de hoy</span>
+            <span id="log-count">0</span>
+        </div>
+        <ul id="log-list" class="log-list"></ul>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwkKt_r7a-nJD5j29Xe2MzbKJWzIEFvlv4-F0le_vgjtVBg4HdwkLfziT_5fhMtbf9u/exec";
+        
+        let docenteId = null, docenteNombre = "", scanning = false, stream = null;
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+        // 1. Identificación Moodle
+        async function getMoodleUser() {
+            try {
+                const sesskey = window.M?.cfg?.sesskey;
+                const userid = parseInt(document.querySelector('[data-userid]')?.dataset?.userid) || 
+                               parseInt(parent.document.querySelector('[data-userid]')?.dataset?.userid);
+                if (!userid) return null;
+
+                // Solo intentamos el fetch si hay sesskey (estamos en Moodle)
+                if (sesskey) {
+                    const r = await fetch('/lib/ajax/service.php?sesskey=' + sesskey, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify([{ methodname: 'core_user_get_users_by_field', args: { field: 'id', values: [String(userid)] } }])
+                    });
+                    const d = await r.json();
+                    return { id: userid, nombre: d[0]?.data?.[0]?.fullname || "Docente" };
+                }
+                return { id: userid, nombre: "Admin/Docente" };
+            } catch (e) { return null; }
+        }
+
+        async function init() {
+            // Fecha por defecto
+            document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
+            
+            const user = await getMoodleUser();
+            if (!user) {
+                updateStatus("err", "Abre esta página desde Moodle para identificarte.");
+                return;
+            }
+
+            docenteId = user.id;
+            docenteNombre = user.nombre;
+            document.getElementById("docente-badge").textContent = docenteNombre;
+            updateStatus("loading", "Cargando centros formadores...");
+
+            try {
+                const res = await fetch(`${APPS_SCRIPT_URL}?action=docente&id=${docenteId}`);
+                const data = await res.json();
+                const sel = document.getElementById("sel-cf");
+                sel.innerHTML = "";
+
+                if (data.encontrado) {
+                    data.cfs.forEach(cf => {
+                        let opt = document.createElement("option");
+                        opt.value = cf; opt.textContent = cf;
+                        sel.appendChild(opt);
+                    });
+                    sel.disabled = false;
+                    document.getElementById("btn-scan").disabled = false;
+                    updateStatus("ok", `✓ Listo para escanear`);
+                } else {
+                    updateStatus("err", "No tienes centros asignados en el Excel.");
+                }
+            } catch (e) { updateStatus("err", "Error conectando con Google Sheets."); }
+        }
+
+        function updateStatus(clase, texto) {
+            const s = document.getElementById("status");
+            s.className = `status-box ${clase}`;
+            s.textContent = texto;
+        }
+
+        // 2. Lógica del Escáner
+        document.getElementById("btn-scan").onclick = () => {
+            if (!scanning) startScan(); else stopScan();
+        };
+
+        function startScan() {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(s => {
+                    stream = s;
+                    video.srcObject = s;
+                    video.setAttribute("playsinline", true);
+                    video.play();
+                    scanning = true;
+                    document.getElementById("btn-scan").textContent = "DETENER";
+                    document.getElementById("placeholder").style.display = "none";
+                    requestAnimationFrame(tick);
+                });
+        }
+
+        function stopScan() {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            scanning = false;
+            document.getElementById("btn-scan").textContent = "INICIAR ESCÁNER";
+            document.getElementById("placeholder").style.display = "flex";
+        }
+
+        function tick() {
+            if (!scanning) return;
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                if (code) registrar(code.data);
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // 3. Registro en Google
+        let lastQR = "", lastTime = 0;
+        async function registrar(qrData) {
+            const ahora = Date.now();
+            if (qrData === lastQR && ahora - lastTime < 3000) return;
+            lastQR = qrData; lastTime = ahora;
+
+            updateStatus("loading", `Registrando ID: ${qrData}...`);
+            
+            const payload = {
+                estudiante_id: qrData,
+                docente: docenteNombre,
+                fecha: document.getElementById("sel-fecha").value,
+                turno: document.getElementById("sel-turno").value
+            };
+
+            try {
+                const res = await fetch(APPS_SCRIPT_URL, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+                const result = await res.json();
+                
+                if (result.status === "ok") {
+                    addLog(qrData, "✓");
+                    updateStatus("ok", "¡Registro exitoso!");
+                } else if (result.status === "duplicado") {
+                    updateStatus("err", "El alumno ya fue registrado hoy.");
+                }
+            } catch (e) { updateStatus("err", "Error al enviar registro."); }
+        }
+
+        function addLog(id, status) {
+            const list = document.getElementById("log-list");
+            const li = document.createElement("li");
+            li.className = "log-item";
+            li.innerHTML = `<span class="item-id">ID: ${id}</span> <span>${status}</span>`;
+            list.prepend(li);
+            document.getElementById("log-count").textContent = list.children.length;
+        }
+
+        init();
+    </script>
+</body>
+</html>
