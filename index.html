@@ -69,159 +69,71 @@
     </div>
 
     <script>
-        // --- CONFIGURACIÓN ---
-        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwkKt_r7a-nJD5j29Xe2MzbKJWzIEFvlv4-F0le_vgjtVBg4HdwkLfziT_5fhMtbf9u/exec";
-        
-        let docenteId = null, docenteNombre = "", scanning = false, stream = null;
-        const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    // --- VARIABLES GLOBALES ---
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlwxnVhYD_0dv-xXWJUZf9mC4DZGhSl0gPH9ZUXmwgLaPuQ9wZVfGdzfyoJnClea4Y/exec"; 
+let docenteId = null;
+let docenteNombre = "";
 
-        // 1. Identificación Moodle
-        async function getMoodleUser() {
-    try {
-        // 1. Intentamos leer los parámetros de la URL (lo que envía el iframe)
-        const params = new URLSearchParams(window.location.search);
-        const urlId = params.get("id");
-        
-        if (urlId) {
-            console.log("ID detectado por URL:", urlId);
-            return { id: urlId, nombre: "Docente Identificado" };
-        }
+// 1. FUNCIÓN DE INICIO (Se ejecuta al cargar la página)
+async function init() {
+    document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
+    updateStatus("loading", "Identificando sesión...");
 
-        // 2. Fallback: Si no hay URL, intentamos lo anterior (solo si no hay iframe)
-        const userid = parseInt(document.querySelector('[data-userid]')?.dataset?.userid);
-        if (userid) return { id: userid, nombre: "Docente" };
+    // Intentar obtener ID desde la URL (Método seguro para Iframes)
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get("id");
 
-        return null;
-    } catch (e) {
-        return null;
+    if (urlId) {
+        docenteId = urlId;
+        docenteNombre = "Docente (ID: " + urlId + ")";
+        document.getElementById("docente-badge").textContent = docenteNombre;
+        // Si tenemos ID, procedemos a cargar los centros
+        await cargarCentrosDesdeGoogle();
+    } else {
+        updateStatus("err", "No se detectó ID en la URL. Usa: ...html?id=6");
     }
 }
+
+// 2. LA FUNCIÓN QUE BUSCABAS: Cargar Centros desde Google
+async function cargarCentrosDesdeGoogle() {
+    try {
+        updateStatus("loading", "Buscando centros asignados...");
         
-        async function init() {
-            // Fecha por defecto
-            document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
-            
-            const user = await getMoodleUser();
-            if (!user) {
-                updateStatus("err", "Abre esta página desde Moodle para identificarte.");
-                return;
-            }
+        // El fetch lleva el ID y un 'cachebuster' para que Google no devuelva datos viejos
+        const url = `${APPS_SCRIPT_URL}?action=docente&id=${docenteId}&t=${Date.now()}`;
+        const res = await fetch(url);
+        const data = await res.json();
 
-            docenteId = user.id;
-            docenteNombre = user.nombre;
-            document.getElementById("docente-badge").textContent = docenteNombre;
-            updateStatus("loading", "Cargando centros formadores...");
+        const sel = document.getElementById("sel-cf");
+        sel.innerHTML = ""; // Limpiar el selector
 
-            try {
-                const res = await fetch(`${APPS_SCRIPT_URL}?action=docente&id=${docenteId}`);
-                const data = await res.json();
-                const sel = document.getElementById("sel-cf");
-                sel.innerHTML = "";
-
-                if (data.encontrado) {
-                    data.cfs.forEach(cf => {
-                        let opt = document.createElement("option");
-                        opt.value = cf; opt.textContent = cf;
-                        sel.appendChild(opt);
-                    });
-                    sel.disabled = false;
-                    document.getElementById("btn-scan").disabled = false;
-                    updateStatus("ok", `✓ Listo para escanear`);
-                } else {
-                    updateStatus("err", "No tienes centros asignados en el Excel.");
-                }
-            } catch (e) { updateStatus("err", "Error conectando con Google Sheets."); }
+        if (data.encontrado && data.cfs.length > 0) {
+            data.cfs.forEach(nombreCentro => {
+                let opt = document.createElement("option");
+                opt.value = nombreCentro;
+                opt.textContent = nombreCentro;
+                sel.appendChild(opt);
+            });
+            sel.disabled = false;
+            document.getElementById("btn-scan").disabled = false;
+            updateStatus("ok", "✓ Centros listos para trabajar");
+        } else {
+            updateStatus("err", `ID ${docenteId} no tiene centros en el Excel.`);
         }
+    } catch (e) {
+        console.error("Error en fetch:", e);
+        updateStatus("err", "Error de conexión con Google Sheets.");
+    }
+}
 
-        function updateStatus(clase, texto) {
-            const s = document.getElementById("status");
-            s.className = `status-box ${clase}`;
-            s.textContent = texto;
-        }
+// 3. FUNCIÓN DE ESTADO (Para el recuadro de colores)
+function updateStatus(clase, texto) {
+    const s = document.getElementById("status");
+    s.className = `status-box ${clase}`;
+    s.textContent = texto;
+}
 
-        // 2. Lógica del Escáner
-        document.getElementById("btn-scan").onclick = () => {
-            if (!scanning) startScan(); else stopScan();
-        };
-
-        function startScan() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                .then(s => {
-                    stream = s;
-                    video.srcObject = s;
-                    video.setAttribute("playsinline", true);
-                    video.play();
-                    scanning = true;
-                    document.getElementById("btn-scan").textContent = "DETENER";
-                    document.getElementById("placeholder").style.display = "none";
-                    requestAnimationFrame(tick);
-                });
-        }
-
-        function stopScan() {
-            if (stream) stream.getTracks().forEach(t => t.stop());
-            scanning = false;
-            document.getElementById("btn-scan").textContent = "INICIAR ESCÁNER";
-            document.getElementById("placeholder").style.display = "flex";
-        }
-
-        function tick() {
-            if (!scanning) return;
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                if (code) registrar(code.data);
-            }
-            requestAnimationFrame(tick);
-        }
-
-        // 3. Registro en Google
-        let lastQR = "", lastTime = 0;
-        async function registrar(qrData) {
-            const ahora = Date.now();
-            if (qrData === lastQR && ahora - lastTime < 3000) return;
-            lastQR = qrData; lastTime = ahora;
-
-            updateStatus("loading", `Registrando ID: ${qrData}...`);
-            
-            const payload = {
-                estudiante_id: qrData,
-                docente: docenteNombre,
-                fecha: document.getElementById("sel-fecha").value,
-                turno: document.getElementById("sel-turno").value
-            };
-
-            try {
-                const res = await fetch(APPS_SCRIPT_URL, {
-                    method: "POST",
-                    body: JSON.stringify(payload)
-                });
-                const result = await res.json();
-                
-                if (result.status === "ok") {
-                    addLog(qrData, "✓");
-                    updateStatus("ok", "¡Registro exitoso!");
-                } else if (result.status === "duplicado") {
-                    updateStatus("err", "El alumno ya fue registrado hoy.");
-                }
-            } catch (e) { updateStatus("err", "Error al enviar registro."); }
-        }
-
-        function addLog(id, status) {
-            const list = document.getElementById("log-list");
-            const li = document.createElement("li");
-            li.className = "log-item";
-            li.innerHTML = `<span class="item-id">ID: ${id}</span> <span>${status}</span>`;
-            list.prepend(li);
-            document.getElementById("log-count").textContent = list.children.length;
-        }
-
-        init();
+   init();
     </script>
 </body>
 </html>
