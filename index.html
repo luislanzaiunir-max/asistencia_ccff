@@ -59,7 +59,7 @@
 
 <script>
 // USAR TU URL DE GOOGLE APPS SCRIPT
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXfahVDhJIo20F01pQUej9i2FqJIs7-IHlea6_bPjRDJ2z8Ae__FcCgQq59pqVyzWP/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw2KSjblknoeQdofr884EOVURvKg36E18rSsEa9ZzrQtpqQB4ttbgz0-RGp05lcnk41/exec";
 let docenteId = null;
 let html5QrCode = null;
 
@@ -80,21 +80,27 @@ async function cargarCentros() {
     try {
         const res = await fetch(`${APPS_SCRIPT_URL}?action=docente&id=${docenteId}`);
         const data = await res.json();
-        const sel = document.getElementById("sel-cf");
-        sel.innerHTML = "";
+        
         if (data.encontrado) {
+            const sel = document.getElementById("sel-cf");
+            sel.innerHTML = "";
             data.cfs.forEach(c => {
                 let opt = document.createElement("option");
                 opt.value = opt.textContent = c;
                 sel.appendChild(opt);
             });
-            sel.disabled = false;
-            document.getElementById("btn-scan").disabled = false;
-            updateStatus("ok", "✓ Sistema listo");
+            // Mostramos el selector y el botón
+            document.getElementById("sel-cf-container").style.display = "block";
+            document.getElementById("btn-scan").style.display = "block";
+            updateStatus("ok", "✓ Docente identificado");
+        } else {
+            updateStatus("err", "El ID " + docenteId + " no tiene centros asignados.");
         }
-    } catch (e) { updateStatus("err", "Error al cargar centros"); }
+    } catch (e) {
+        updateStatus("err", "Error de conexión con el script.");
+    }
 }
-
+    
 function startScanner() {
     if (html5QrCode) { html5QrCode.stop().then(() => location.reload()); return; }
     
