@@ -4,75 +4,123 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Asistencia IUNIR</title>
-    <link rel="icon" type="image/png" href="favicon.ico">
-    <link rel="apple-touch-icon" href="favicon.ico">
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --text: #f8fafc; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 10px; display: flex; justify-content: center; }
-        .app-card { background: var(--card); padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; }
-        .badge { background: #334155; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; }
-        select, input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; margin-top: 5px; box-sizing: border-box; }
-        #reader { width: 100%; border-radius: 12px; margin-top: 10px; overflow: hidden; }
-       #btn-scan { 
-        display: none; /* Oculto por defecto */
-        width: 100%; 
-        padding: 15px; 
-        background: var(--accent); 
-        color: white; 
-        border: none; 
-        border-radius: 8px; 
-        font-weight: bold; 
-        margin-top: 15px; 
-        cursor: pointer; 
-    }
-    #sel-cf-container { display: none; margin-top: 10px; }
-        .status-box { margin-top: 10px; padding: 10px; border-radius: 8px; font-size: 0.85rem; text-align: center; }
-        .loading { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
-        .ok { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
-        .err { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        :root {
+            --iunir-blue: #1e3a8a;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+        }
+
+        body { 
+            background: var(--bg); 
+            font-family: -apple-system, system-ui, sans-serif; 
+            margin: 0; padding: 15px;
+            display: flex; justify-content: center;
+        }
+
+        .app-card { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 12px; 
+            width: 100%; max-width: 380px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        h2 { 
+            text-align: center; color: var(--iunir-blue); 
+            font-size: 1.1rem; margin-top: 0; 
+            border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;
+        }
+
+        .form-group { margin-bottom: 15px; }
+
+        label { 
+            display: block; font-size: 0.7rem; font-weight: 700;
+            color: #64748b; text-transform: uppercase; margin-bottom: 4px;
+        }
+
+        /* Unificamos el estilo del select e input */
+        select, input { 
+            width: 100% !important; 
+            display: block;
+            padding: 12px; 
+            border-radius: 8px; 
+            border: 1px solid #cbd5e1; 
+            background: #fff; 
+            font-size: 1rem;
+            color: var(--text);
+            box-sizing: border-box;
+            appearance: none; /* Quita estilos nativos raros en móviles */
+        }
+
+        /* Flechita para el select ya que usamos appearance:none */
+        #sel-cf {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 18px;
+            padding-right: 40px;
+        }
+
+        #btn-scan { 
+            display: none; width: 100%; padding: 16px; 
+            background: var(--iunir-blue); color: white; 
+            border: none; border-radius: 8px; font-weight: bold; 
+            margin-top: 10px; cursor: pointer;
+        }
+
+        #reader { width: 100%; border-radius: 8px; margin-top: 15px; overflow: hidden; }
+        
+        .status-box { 
+            margin-top: 15px; padding: 10px; border-radius: 6px; 
+            font-size: 0.85rem; text-align: center; font-weight: 500;
+        }
+        .loading { background: #f1f5f9; color: #475569; }
+        .ok { background: #dcfce7; color: #166534; }
+        .err { background: #fee2e2; color: #991b1b; }
     </style>
-    <div id="sel-cf-container">
-    <label style="font-size:0.8rem; color:#94a3b8;">Centro Formador</label>
-    <select id="sel-cf"></select>
-</div>
-<button id="btn-scan" onclick="startScanner()">INICIAR ESCÁNER</button>
 </head>
 <body>
 
 <div class="app-card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-        <h2 style="margin:0; font-size:1rem; color:var(--accent);">ASISTENCIA IUNIR</h2>
-        <span id="docente-badge" class="badge">ID: ?</span>
+    <h2>ASISTENCIA IUNIR</h2>
+
+    <div class="form-group">
+        <label>Fecha de Rotación</label>
+        <input type="date" id="sel-fecha">
     </div>
 
-    <label style="font-size:0.8rem; color:#94a3b8;">Fecha</label>
-    <input type="date" id="sel-fecha">
+    <div id="sel-cf-container" class="form-group" style="display:none;">
+        <label>Centro Formador</label>
+        <select id="sel-cf"></select>
+    </div>
 
-    <label style="font-size:0.8rem; color:#94a3b8; display:block; margin-top:10px;">Centro Formador</label>
-    <select id="sel-cf" disabled><option>Cargando centros...</option></select>
-
-    <button id="btn-scan" onclick="startScanner()" disabled>INICIAR ESCÁNER</button>
+    <button id="btn-scan" onclick="startScanner()">📷 INICIAR ESCÁNER</button>
     <div id="reader"></div>
-    <div id="status" class="status-box">Iniciando...</div>
+    <div id="status" class="status-box loading">Verificando acceso...</div>
 </div>
 
 <script>
-// USAR TU URL DE GOOGLE APPS SCRIPT
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvrgup9Ai8Z99fVnhjPblmgo3zuUAoA32EdmLq4Iuhh3TBFQJwCesp3Oy3EI6c9t4/exec";
 let docenteId = null;
 let html5QrCode = null;
 
-async function init() {
-    document.getElementById("sel-fecha").value = new Date().toISOString().split('T')[0];
+function init() {
+    // CORRECCIÓN DE FECHA LOCAL (No más "mañana")
+    const ahora = new Date();
+    const offset = ahora.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(ahora - offset)).toISOString().split('T')[0];
+    document.getElementById("sel-fecha").value = localISOTime;
+
     const params = new URLSearchParams(window.location.search);
     docenteId = params.get("id");
 
     if (docenteId) {
-        document.getElementById("docente-badge").textContent = "ID: " + docenteId;
         cargarCentros();
     } else {
-        updateStatus("err", "Error: No se detectó ID de docente.");
+        updateStatus("err", "⚠️ No se detectó sesión de docente.");
     }
 }
 
@@ -80,7 +128,6 @@ async function cargarCentros() {
     try {
         const res = await fetch(`${APPS_SCRIPT_URL}?action=docente&id=${docenteId}`);
         const data = await res.json();
-        
         if (data.encontrado) {
             const sel = document.getElementById("sel-cf");
             sel.innerHTML = "";
@@ -89,56 +136,44 @@ async function cargarCentros() {
                 opt.value = opt.textContent = c;
                 sel.appendChild(opt);
             });
-            // Mostramos el selector y el botón
             document.getElementById("sel-cf-container").style.display = "block";
             document.getElementById("btn-scan").style.display = "block";
-            updateStatus("ok", "✓ Docente identificado");
+            updateStatus("ok", "✅ Identidad verificada");
         } else {
-            updateStatus("err", "El ID " + docenteId + " no tiene centros asignados.");
+            updateStatus("err", "❌ Sin centros asignados.");
         }
-    } catch (e) {
-        updateStatus("err", "Error de conexión con el script.");
-    }
+    } catch (e) { updateStatus("err", "⚠️ Error de conexión"); }
 }
-    
+
 function startScanner() {
-    if (html5QrCode) { html5QrCode.stop().then(() => location.reload()); return; }
-    
+    if (html5QrCode) { location.reload(); return; }
     html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 10, qrbox: 250 },
+        { facingMode: "environment" }, { fps: 10, qrbox: 250 },
         (text) => { html5QrCode.stop(); enviarAsistencia(text); },
-        (msg) => {}
-    ).catch(() => updateStatus("err", "Error de cámara. Permití el acceso en el navegador."));
+        () => {}
+    ).catch(() => updateStatus("err", "🚫 Habilitá la cámara"));
 }
 
 async function enviarAsistencia(alumnoId) {
-    updateStatus("loading", "Registrando...");
+    updateStatus("loading", "⏳ Guardando...");
     const centro = document.getElementById("sel-cf").value;
     const fecha = document.getElementById("sel-fecha").value;
-    
-    // Estos nombres (idDocente, idAlumno, etc.) deben coincidir con el script de arriba
-    const url = `${APPS_SCRIPT_URL}?action=asistencia&idDocente=${docenteId}&idAlumno=${alumnoId}&centro=${encodeURIComponent(centro)}&fecha=${fecha}`;
-    
     try {
+        const url = `${APPS_SCRIPT_URL}?action=asistencia&idDocente=${docenteId}&idAlumno=${alumnoId}&centro=${encodeURIComponent(centro)}&fecha=${fecha}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.ok) {
-            updateStatus("ok", "✓ ¡Presente registrado!");
-            setTimeout(() => { location.reload(); }, 3000);
-        } else {
-            updateStatus("err", "Error en hoja: " + data.error);
+            updateStatus("ok", "🎯 ¡Presente guardado!");
+            setTimeout(() => { location.reload(); }, 2000);
         }
-    } catch (e) {
-        updateStatus("err", "Error de red al guardar");
-    }
+    } catch (e) { updateStatus("err", "⚠️ Error al guardar"); }
 }
 
 function updateStatus(c, t) {
     const s = document.getElementById("status");
     s.className = "status-box " + c;
-    s.textContent = t;
+    s.innerText = t;
 }
 
 init();
